@@ -10,14 +10,15 @@ db_connect = pymysql.connect(host='127.0.0.1',
                                      password='on@itsiriC_96')
 cursor = db_connect.cursor()
 
+print("MySQL connection is open")
 
+# after receiving a post request add it to database
 @app.route('/accident', methods=['POST'])
 def add_to_db():
-    print(request.json)
+    # print(request.json)
     if not request.json or not 'Longitude' in request.json or not 'Latitude' in request.json:
         abort(400)
 
-    accident_id = request.json['AccidentId']
     longitude = request.json['Longitude']
     latitude = request.json['Latitude']
     category = request.json['Category']
@@ -25,27 +26,20 @@ def add_to_db():
     time = "NOW()"
     type = request.json['Type']
 
-    mySql_insert_query = """INSERT INTO Accident (AccidentId, Longitude, Latitude, Category, RequiredVehicleType, TimeS, Type) 
+    mySql_insert_query = """INSERT INTO Accident (Longitude, Latitude, Category, RequiredVehicleType, Time, Type) 
                             VALUES 
-                         (""" + accident_id + ", " + longitude + ", " + latitude + ", " + category + ", " + \
-                         req_vehicle_type + ", " + time + ", " + type + ")"
+                         (""" + str(longitude) + ", " + str(latitude) + ", " + category + ", " + \
+                         req_vehicle_type + ", " + time + ", " + str(type) + ")"""
 
     cursor.execute(mySql_insert_query)
     db_connect.commit()
-    print(cursor.rowcount, "Accident record was successfully inserted into the database")
-    cursor.close()
+    # print(cursor.rowcount, "Accident record was successfully inserted into the database")
 
-    return "added successfully"
+    return "Records added successfully into the database"
 
 
-def main():
-    app.run(port='5002')
-
+def close_connection():
     if db_connect.open:
         cursor.close()
         db_connect.close()
         print("MySQL connection is closed")
-
-
-if __name__ == "__main__":
-    main()
