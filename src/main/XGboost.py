@@ -2,6 +2,7 @@ import xgboost as xgb
 import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error
+import joblib
 
 
 def time_convert(x):
@@ -18,7 +19,7 @@ class XGBoost:
         # prepare the dataframe
         training_df = pd.read_csv("training_data.csv")
         training_df["duration"] = training_df["duration"].apply(time_convert)
-        x = training_df.drop(["duration"], axis=1)
+        x = training_df.drop(["duration", "distance"], axis=1)
         target = training_df["duration"]
 
         # split the data into train, test and validation sets
@@ -59,16 +60,6 @@ class XGBoost:
         rmse = pd.np.sqrt(mean_squared_error(target_test, predicted_test))
 
         # Save the model file
-        model.save_model('model.mdl')
+        joblib.dump(model, "results")
 
-        # Predict on the test dataset
-        p_test = model.predict(d_test)
-
-        # Create a submission file
-        sub = pd.DataFrame()
-        sub['target'] = target_test
-        sub['trip_duration'] = p_test
-
-        # write the csv
-        sub.to_csv('results.csv', index=False)
 
