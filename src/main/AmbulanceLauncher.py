@@ -1,4 +1,6 @@
+from main.AmbulanceDataUtil import fetch_ambulance_data
 from main.DatabaseUtil import print_time
+from main.NaturalLanguageProcessor import categorizeAccident
 from main.RESTapi import app
 from main.XGboost import XGBoost
 from main.Planner import run_planner
