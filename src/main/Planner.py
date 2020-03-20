@@ -5,7 +5,10 @@ import pandas as pd
 import xgboost as xgb
 from datetime import datetime
 
+from main.RESTapi import get_cursor
+
 accidents = []
+ambulances = []
 
 
 def run_planner():
@@ -15,7 +18,7 @@ def run_planner():
             test = get_time_between_points(0.123155, 51.480202, -0.256472, 51.467222)
             prioritise_accidents()
             best_accident = min(accidents, key=lambda accident: accident[8])
-            print("")
+            print(best_accident)
 
 
 def get_time_between_points(pickup_long, pickup_lat, dropoff_long, dropoff_lat):
@@ -54,3 +57,31 @@ def prioritise_accidents():
             accident[8] = 5 if time_elapsed > 6000 else 9
 
 
+def ambulance_assignment(best_accident):
+    best_ambulance = None
+    for ambulance in ambulances:
+        ambulance_cat = ambulance[3]
+        accident_cat = best_accident[4]
+
+        min_time = 31500000
+
+        #TODO: Add ambulance filtering
+        if int(ambulance_cat) & int(accident_cat) != int(accident_cat):
+            print("Not Same")
+        else:
+            print("Same")
+            pred_time = get_time_between_points(ambulance[1], ambulance[2], best_accident[1], best_accident[2])
+            if pred_time < min_time:
+                min_time = pred_time
+                best_ambulance = ambulance
+
+    if best_ambulance is None:
+        print("There was no ambulance available to assign for this accident")
+
+    else:
+        cursor = get_cursor()
+        cursor.execute("UPDATE Ambulance SET Assignment = Unavailable")
+
+    return best_ambulance
+
+#def hospital_assignment(best_accident):
