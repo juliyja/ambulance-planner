@@ -1,0 +1,123 @@
+import numpy
+import requests
+import csv
+from datetime import datetime
+
+URL = "http://127.0.0.1:5002/accident"
+
+# TODO: create a more accurate way of assigning vehicle type
+cardiac = 128
+trauma = 64
+stroke = 32
+heart_attack = 16
+car_accident = 8
+neonatal = 4
+support_vehicle_needed = 2
+transport_needed = 1
+
+time_base = "@ HH:MM:SS"
+time = time_base.replace("@", datetime.today().strftime('%Y-%m-%d'))
+
+counter = 3059
+
+accident_density = {"1": 1530, "2": 764, "3": 459, "4": 306}
+
+# the index in the list represents the hour and so:
+# at 1 - 112 accidents, at 2am - 104 ... at 11pm - 123
+list_of_accidents = [121, 112, 104, 98, 95, 94, 95, 100, 110, 125, 141, 159, 164, 163, 156, 145, 141, 142, 142, 139,
+                     134, 130, 126, 123]
+
+
+def create_accidents():
+    # generate accidents
+    for i in range(0, 24):
+        if i < 10:
+            hour = "0" + str(i)
+            time1 = time.replace("HH", hour)
+        else:
+            time1 = time.replace("HH", str(i))
+        for j in range(list_of_accidents[i]):
+
+            category = assign_category()
+
+            # TODO: create a more accurate way of assigning types
+            random = numpy.random.uniform(0, 100, 1)[0]
+            if random <= 5:
+                accident_type = int("10000000", 2)
+            elif 5 < random < 10:
+                accident_type = int("01000000", 2)
+            else:
+                accident_type = int("00000000", 2)
+
+            timeS = generate_time(time1)
+
+            lat, lon = generate_location()
+
+            casualties = assign_number_casualties()
+
+            data = {"Longitude": lon, "Latitude": lat, "Category": category,
+                    "Type": accident_type, "Time": timeS, "Casualties": casualties}
+
+            requests.post(url=URL, json=data)
+
+
+def generate_time(time1):
+    minutes = int(numpy.random.uniform(0, 60, 1)[0])
+    seconds = int(numpy.random.uniform(0, 60, 1)[0])
+    if minutes < 10:
+        minutes = "0" + str(minutes)
+    if seconds < 10:
+        seconds = "0" + str(seconds)
+    time2 = time1.replace("MM", str(minutes))
+    timeS = time2.replace("SS", str(seconds))
+    return timeS
+
+
+def assign_category():
+    random = numpy.random.uniform(0, 100, 1)[0]
+    if random < 12:
+        category = "1"
+    elif random < 74:
+        category = "2"
+    elif random < 96:
+        category = "3"
+    elif random < 97:
+        category = "4"
+    else:
+        category = "'HCP'"
+
+    return category
+
+
+def assign_number_casualties():
+    random = numpy.random.uniform(0, 100, 1)[0]
+    if random < 85:
+        casualties = 1
+    elif random < 97:
+        casualties = 2
+    else:
+        casualties = numpy.random.uniform(3, 10, 1)[0]
+
+    return casualties
+
+
+def generate_location():
+    while True:
+        accident_latitude = numpy.random.uniform(51.297844, 51.710034, 1)[0]
+        accident_longitude = numpy.random.uniform(-0.478763, 0.288949, 1)[0]
+        with open('accident_density.csv', mode='r') as csv_file:
+            csv_reader = csv.DictReader(csv_file)
+            for row in csv_reader:
+                if float(row["3Lat"]) <= accident_latitude <= float(row["1Lat"]) and float(
+                        row["1Lon"]) <= accident_longitude <= float(row["2Lon"]):
+                    if accident_density[row["Density"]] > 0:
+                        accident_density[row["Density"]] -= 1
+                        return accident_latitude, accident_longitude
+
+
+def main():
+    create_accidents()
+
+
+if __name__ == "__main__":
+    main()
