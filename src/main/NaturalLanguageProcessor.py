@@ -33,7 +33,7 @@ C: I can hear it now. Thank you!
 O: Good. Well done. Good bye. 
 """
 
-keywords = ["heart", "attack", "breathing", "gunshot", "bleeding", "unconscious", "diabetes"]
+keywords = ["heart attack", "breathing", "gunshot", "bleeding", "unconscious", "diabetes"]
 found_keywords = set()
 
 
@@ -111,8 +111,9 @@ def generateKeywords(qa_list):
     question = []
     simple_answer = ["yes", "no"]
     for item in qa_list:
-        for word in item[1]:
-            keyword = findCosineSimiliarities(word, keywords)
+        for i in range(len(item[1])):
+            sentence = item[1]
+            keyword = findCosineSimiliarities(sentence, keywords, i)
             # find keywords for operator's questions
             if item[0] == "o":
                 if keyword:
@@ -120,14 +121,14 @@ def generateKeywords(qa_list):
             # find keywords for caller's remarks
             if item[0] == "c":
                 if question:
-                    checkAnswer(question, simple_answer, word)
+                    checkAnswer(question, simple_answer, sentence, i)
                 if keyword:
                     found_keywords.add(keyword)
     print(found_keywords)
 
 
-def checkAnswer(question, simple_answer, word):
-    answer = findCosineSimiliarities(word, simple_answer)
+def checkAnswer(question, simple_answer, sentence, index):
+    answer = findCosineSimiliarities(sentence, simple_answer, index)
     if answer == "yes":
         found_keywords.update(question)
     elif answer:
@@ -140,9 +141,27 @@ def checkAnswer(question, simple_answer, word):
 
 
 # use word2vec in order to find whether a word from the remark matches any of the preset keyword
-def findCosineSimiliarities(word, keywords):
+def findCosineSimiliarities(sentence, keywords, index):
 
-    best_keyword = max(keywords, key=lambda keyword: model.similarity(word, keyword))
-    if model.similarity(word, best_keyword) > 0.45:
-        print(word, best_keyword, model.similarity(word, best_keyword))
+    best_keyword = max(keywords, key=lambda keyword: fafarafa(sentence, keyword, index))
+    # print("BEEEEST " + best_keyword)
+    if fafarafa(sentence, best_keyword, index) > 0.45:
+        # print("AAAAAAAAAAAA!!! ", sentence[index], best_keyword, fafarafa(sentence, best_keyword, index))
         return best_keyword
+
+
+def fafarafa(sentence, keyword, index):
+
+    sum_cosines = 0
+    list = keyword.split()
+    for k in list:
+        if index < len(sentence):
+            cosine = model.similarity(sentence[index], k)
+            sum_cosines += cosine
+            # print(sentence[index], k, cosine)
+            index += 1
+        else:
+            return 0
+    average = sum_cosines/len(list)
+    return average
+
