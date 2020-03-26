@@ -13,7 +13,7 @@ C: I need an ambulance, quick!
 O: What’s the problem? 
 C: It’s my father. He’s unconscious. Maybe it’s a heart attack. 
 O: Is he breathing? 
-C: No, he is but very little 
+C: No, he is not breathing
 O: OK. I need to ask you some questions. What’s your address? 
 C: 24 Park Street. You turn right from the High Street and it’s on the left. Please hurry! 
 O: Please stay calm. The ambulance is coming. Please listen carefully. Tell me what happened. 
@@ -40,6 +40,7 @@ found_keywords = set()
 
 def categorizeAccident():
 
+    test_model()
     divided_text = createConversationList(call_transcript)
     generateKeywords(divided_text)
 
@@ -110,10 +111,24 @@ def generateKeywords(qa_list):
 
     question = []
     simple_answer = ["yes", "no"]
+    skip_keyword = False
+
     for item in qa_list:
         for i in range(len(item[1])):
             sentence = item[1]
-            keyword = findCosineSimiliarities(sentence, keywords, i)
+            if skip_keyword:
+                skip_keyword = False
+                continue
+            if sentence[i] == "not":
+                i += 1
+                after_not = findBestKeyword(sentence, keywords, i)
+                if after_not:
+                    keyword = "not " + after_not
+                    print("negation: ", keyword)
+                    skip_keyword = True
+            else:
+                keyword = findBestKeyword(sentence, keywords, i)
+                print("next keyword: ", keyword)
             # find keywords for operator's questions
             if item[0] == "o":
                 if keyword:
@@ -128,7 +143,7 @@ def generateKeywords(qa_list):
 
 
 def checkAnswer(question, simple_answer, sentence, index):
-    answer = findCosineSimiliarities(sentence, simple_answer, index)
+    answer = findBestKeyword(sentence, simple_answer, index)
     if answer == "yes":
         found_keywords.update(question)
     elif answer:
@@ -141,16 +156,14 @@ def checkAnswer(question, simple_answer, sentence, index):
 
 
 # use word2vec in order to find whether a word from the remark matches any of the preset keyword
-def findCosineSimiliarities(sentence, keywords, index):
+def findBestKeyword(sentence, keywords, index):
 
-    best_keyword = max(keywords, key=lambda keyword: fafarafa(sentence, keyword, index))
-    # print("BEEEEST " + best_keyword)
-    if fafarafa(sentence, best_keyword, index) > 0.45:
-        # print("AAAAAAAAAAAA!!! ", sentence[index], best_keyword, fafarafa(sentence, best_keyword, index))
+    best_keyword = max(keywords, key=lambda keyword: findCosineSimiliarity(sentence, keyword, index))
+    if findCosineSimiliarity(sentence, best_keyword, index) > 0.45:
         return best_keyword
 
 
-def fafarafa(sentence, keyword, index):
+def findCosineSimiliarity(sentence, keyword, index):
 
     sum_cosines = 0
     list = keyword.split()
