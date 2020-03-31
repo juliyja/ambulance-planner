@@ -1,4 +1,4 @@
-from main.DatabaseUtil import get_cursor
+from main.RESTapi import get_cursor
 from main.Planner import ambulances
 
 
