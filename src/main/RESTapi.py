@@ -49,17 +49,17 @@ def add_nlp_to_db():
 
     longitude = request.json['Longitude']
     latitude = request.json['Latitude']
-    # category = #tu bedzie metoda
-    # req_vehicle_type = tu bedzie metoda
-    time = str(datetime.now())
-    # type = tu bedzie metoda
-    transcript = request.json["Transcript"]
+    transcript = request.json['Transcript']
+    transcript = re.sub(r'\"', '', transcript)
+    print(transcript)
+    type, category, req_transport_type = categorizeAccident(transcript)
+    time = request.json['Time']
 
-    mySql_insert_query = """INSERT INTO Accident (Longitude, Latitude, Category, RequiredVehicleType, Time, Type, Transcript) 
+    mySql_insert_query = """INSERT INTO Accident (Longitude, Latitude, Category, Time, Type, TRANSCRIPT) 
                             VALUES 
-                         (""" + str(longitude) + ", " + str(latitude) + ", " + category + ", " + \
-                         req_vehicle_type + ", " + "STR_TO_DATE('" + time + "','%Y-%m-%d %H:%i:%s'), " + str(type) + \
-                         ", " + transcript + ")"""
+                         (""" + str(longitude) + ", " + str(latitude) + ", " + str(
+        category) + ", " + "STR_TO_DATE('" + time + "','%Y-%m-%d %H:%i:%s'), \"" + str(req_transport_type) + \
+                         "\", \"" + transcript + "\")"""
     print(mySql_insert_query)
 
     cursor = get_cursor()
