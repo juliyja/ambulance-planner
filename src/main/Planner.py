@@ -40,21 +40,21 @@ def prioritise_accidents():
     for accident in accidents:
 
         category = accident[3]
-        start_time = accident[5]
+        start_time = accident[4]
         now = datetime.now()
         time_elapsed = (now - start_time).total_seconds()
 
         if category == "1":
-            accident[8] = 1
+            accident[7] = 1
         elif category == "2":
-            accident[8] = 2 if time_elapsed > 60 else 6
+            accident[7] = 2 if time_elapsed > 60 else 6
         elif category == "3":
-            accident[8] = 3 if time_elapsed > 500 else 7
+            accident[7] = 3 if time_elapsed > 500 else 7
         elif category == "4":
-            accident[8] = 4 if time_elapsed > 6000 else 8
+            accident[7] = 4 if time_elapsed > 6000 else 8
         # if category is HCP and more time then 2.5 hours have elapsed from the accident send an ambulance
         elif category == "HCP":
-            accident[8] = 5 if time_elapsed > 6000 else 9
+            accident[7] = 5 if time_elapsed > 6000 else 9
 
 
 def ambulance_assignment(best_accident):
