@@ -3,12 +3,10 @@ from functools import reduce
 
 import nltk
 import gensim
-import wget
-from nltk import sent_tokenize
-from gensim.models.word2vec import Word2Vec
 
 from main.DatabaseUtil import get_cursor
 
+# minimum cosine similarity value between two words
 threshold = 0.469
 
 nltk.download('stopwords')
@@ -17,39 +15,63 @@ nltk.download('punkt')
 cursor = get_cursor()
 model = gensim.models.KeyedVectors.load_word2vec_format('GoogleNews-vectors-negative300-SLIM.bin', binary=True)
 
+# TODO: delete this, this is only for testing
 call_transcript = """none
 """
 
 
+# fetch keywords stored in database and save them as a part of different data structures
+# @return list of keywords, dictionary of keyword to keyword group, negation dictionary that stores mappings of
+# negated keywords to keywords and keywords to negated keywords, set of negative keywords
+
 def fetch_keywords_from_db():
-    keywords = []
-    keywords_map = {}
-    negation_map = {}
-    negated_keywords = set()
+    keywords_list = []
+    keywords_dictionary = {}
+    negation_dictionary = {}
+    negated_keywords_set = set()
     cursor.execute("SELECT * FROM KEYWORD")
     rows = cursor.fetchall()
     for row in rows:
-        keywords.append(row[0])
-        keywords_map[row[0]] = row[1]
-        keywords_map[row[2]] = row[3]
-        negation_map[row[2]] = row[0]
-        negation_map[row[0]] = row[2]
-        negated_keywords.add(row[2])
+        # add keywords to list
+        keywords_list.append(row[0])
+        # assign keyword group values to keywords for both neutral and negated keywords
+        keywords_dictionary[row[0]] = row[1]
+        keywords_dictionary[row[2]] = row[3]
+        # assign negated keywords to keywords and vice-versa
+        negation_dictionary[row[2]] = row[0]
+        negation_dictionary[row[0]] = row[2]
+        # create set of negated keywords
+        negated_keywords_set.add(row[2])
 
-    return keywords, keywords_map, negation_map, negated_keywords
+    return keywords_list, keywords_dictionary, negation_dictionary, negated_keywords_set
 
 
+# save returned keywords structures
 keywords, keywords_map, negation_map, negated_keywords = fetch_keywords_from_db()
 
 
-def categorizeAccident(transcript):
+# main method for text analysis using word2vec and nltk. It calls all the methods needed
+# to process, analyse and categorise accident transcripts
+# @param call_transcript
+# @return accident information extracted from transcript: type of accident, category of accident and transport type
+
+def categorize_accident(transcript):
+
     # add manoeuvre as a word embedding for american maneuver
     update_word_model('maneuver', 'manoeuvre')
+    # TODO: to be removed once nlp is finished
     test_model()
-    divided_text = createConversationList(transcript)
-    found_keywords = generateKeywords(divided_text)
+    # prepare transcript
+    prepared_text = prepare_text_for_processing(transcript)
+    divided_text = create_conversation_list(prepared_text)
+
+    # extract keywords from prepared transcript
+    found_keywords = generate_keywords(divided_text)
     print(found_keywords)
+
+    # map each keyword in found_keywords to it's respective group
     found_keywords = map_found_keywords(found_keywords)
+
     accident_type = match_accident_info(found_keywords, "ACCIDENT_TYPE")
     found_keywords.add(accident_type.lower())
     print("FOUND: ", found_keywords)
@@ -60,13 +82,19 @@ def categorizeAccident(transcript):
     return accident_type, category, transport_type
 
 
-# prepare
-def prepareTextForProcessing(transcript):
-    new_transcript = modifyRegex(transcript)
+# prepare transcript by modifying regex, removing any words that do not give any
+# real meaning and are commonly used, punctuation and tokenize the text
+# @return modified call transcript
+
+def prepare_text_for_processing(transcript):
+    new_transcript = modify_regex(transcript)
 
     stop_words = set(nltk.corpus.stopwords.words('english'))
+
+    # TODO: remove also words such as ugh, hmmm, egh
     # add words frequently occurring in calls that do not carry any real meaning
     stop_words.update({"please", "help", "hurry", "quick", "hello", "erm"})
+
     # Remove stopwords leaving the ones needed to correctly classify accidents
     exclude_words = {"no", "nor", "not", "o"}
     new_stop_words = stop_words.difference(exclude_words)
@@ -76,15 +104,16 @@ def prepareTextForProcessing(transcript):
     # remove punctuation
     words = [word for word in word_tokens if word.isalpha()]
     # remove stopwords
-    filtered_sentence = [w for w in words if w not in new_stop_words]
+    prepared_text = [w for w in words if w not in new_stop_words]
 
-    return filtered_sentence
+    return prepared_text
 
 
 # Remove the useless expressions added in parenthesis by a person transcribing the call,
 # such as "address removed" using regular expressions
+# @return filtered transcript
 
-def modifyRegex(transcript):
+def modify_regex(transcript):
     transcript = transcript.lower()
     # expand english language negative contractions such as can't into can not
     transcript = re.sub(r"'t", " not", transcript)
@@ -92,15 +121,15 @@ def modifyRegex(transcript):
     transcript = re.sub(r'\([^(\))]*\)', '', transcript)
     # remove square brackets and text within them
     new_transcript = re.sub(r'\[[^(\])]*\]', '', transcript)
-    print(new_transcript)
     return new_transcript
 
 
 # create list of questions and answers based on whether the caller
 # or the operator made the remark
+# @param simplified call transcript
+# @return list of groups of words associated with either the caller or operator
 
-def createConversationList(transcript):
-    prepared_text = prepareTextForProcessing(transcript)
+def create_conversation_list(prepared_text):
     qa_list = []
     temp = []
     for w in prepared_text:
@@ -124,50 +153,32 @@ def createConversationList(transcript):
     return qa_list
 
 
-def generateKeywords(qa_list):
+# generate keywords for either operator's question or caller's answer
+
+def generate_keywords(qa_list):
     found_keywords = set()
     question = []
+    # main answers to search for in caller's remark
     simple_answer = ["yes", "no", "not know"]
     skip_keyword = False
 
-    for item in qa_list:
-        sentence = item[1]
+    for remark in qa_list:
+        sentence = remark[1]
         if question:
-            checkAnswer(question, simple_answer, sentence, found_keywords)
-        check_sentence(found_keywords, item, question, sentence, skip_keyword)
+            check_answer(question, simple_answer, sentence, found_keywords)
+        check_sentence(found_keywords, remark, question, sentence, skip_keyword)
 
     return found_keywords
 
 
-def check_sentence(found_keywords, item, question, sentence, skip_keyword):
-    for i in range(len(sentence)):
-        keyword = None
-        if skip_keyword:
-            skip_keyword = False
-            continue
-        if sentence[i] == "not":
-            i += 1
-            after_not = findBestKeyword(sentence, keywords, i)[0]
-            if after_not:
-                keyword = "not " + after_not
-                skip_keyword = True
-        else:
-            keyword = findBestKeyword(sentence, keywords, i)[0]
-        # find keywords for operator's questions
-        if item[0] == "o":
-            if keyword:
-                question.append(keyword)
-        # find keywords for caller's remarks
-        if item[0] == "c":
-            if keyword:
-                found_keywords.add(keyword)
-                print("JULIA JEST LEPSZA NIZ SZYMON", sentence[i], "FOR KEYWORD", keyword)
+# search caller remark for any words with high cosine similarity to answer words (yes, no, not know)
+# @params list of keywords found in operator's question, list of three simple answers for
+# yes, no and don't know, sentence to analyse, list of all already found keywords
 
-
-def checkAnswer(question, simple_answer, sentence, found_keywords):
+def check_answer(question, simple_answer, sentence, found_keywords):
     answers = {"yes": 0, "no": 0, "not know": 0}
     for index in range(len(sentence)):
-        answer, cosine = findBestKeyword(sentence, simple_answer, index)
+        answer, cosine = find_best_keyword(sentence, simple_answer, index)
         print("ANSWER:", answer, "QUESTION: ", question)
         if answer:
             answers[answer] = max(answers[answer], cosine)
@@ -183,16 +194,48 @@ def checkAnswer(question, simple_answer, sentence, found_keywords):
     question.clear()
 
 
+# check sentence for any relevant keywords
+# @params list of already found keywords, analysed remark with mark c for caller and o for operator,
+# list of question keywords, sentence in remark associated with either caller or operator,
+# flag whether next keyword should be skipped or not
+
+def check_sentence(found_keywords, remark, question, sentence, skip_keyword):
+    for i in range(len(sentence)):
+        keyword = None
+        if skip_keyword:
+            skip_keyword = False
+            continue
+        # if word in the sentence is not check if the ones that immediately follow are any relevant keywords
+        if sentence[i] == "not":
+            i += 1
+            after_not = find_best_keyword(sentence, keywords, i)[0]
+            if after_not:
+                keyword = "not " + after_not
+                skip_keyword = True
+        else:
+            keyword = find_best_keyword(sentence, keywords, i)[0]
+        # find keywords for operator's questions
+        if remark[0] == "o":
+            if keyword:
+                question.append(keyword)
+        # find keywords for caller's remarks
+        if remark[0] == "c":
+            if keyword:
+                found_keywords.add(keyword)
+                print("JULIA JEST LEPSZA NIZ SZYMON", sentence[i], "FOR KEYWORD", keyword)
+
+
 # use word2vec in order to find whether a word from the remark matches any of the preset keyword
-def findBestKeyword(sentence, keywords, index):
-    best_keyword = max(keywords, key=lambda keyword: findCosineSimiliarity(sentence, keyword, index))
-    cosine_similiarity = findCosineSimiliarity(sentence, best_keyword, index)
+
+def find_best_keyword(sentence, keywords, index):
+    best_keyword = max(keywords, key=lambda keyword: find_cosine_similiarity(sentence, keyword, index))
+    cosine_similiarity = find_cosine_similiarity(sentence, best_keyword, index)
     if cosine_similiarity > threshold:
         return best_keyword, cosine_similiarity
     return None, 0
 
 
-def findCosineSimiliarity(sentence, keyword, index):
+def find_cosine_similiarity(sentence, keyword, index):
     try:
         sum_cosines = 0
         list = keyword.split()
