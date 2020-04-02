@@ -5,7 +5,7 @@ import pandas as pd
 import xgboost as xgb
 from datetime import datetime
 
-from main.RESTapi import get_cursor
+from main.DatabaseUtil import get_cursor
 
 accidents = []
 ambulances = []

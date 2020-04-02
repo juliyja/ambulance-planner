@@ -1,27 +1,14 @@
+import re
 from datetime import datetime
 
 from flask import Flask, request
 from flask_restful import Api, abort
-import pymysql
+
+from main.DatabaseUtil import get_cursor, close_connection
+from main.NaturalLanguageProcessor import categorizeAccident
 
 app = Flask(__name__)
 api = Api(app)
-
-
-def get_cursor():
-    db_connect = pymysql.connect(host='127.0.0.1',
-                                 database='AmbulanceDB',
-                                 user='root',
-                                 password='on@itsiriC_96')
-    cursor = db_connect.cursor()
-    return cursor
-
-
-def close_connection(cursor):
-    if cursor.connection.open:
-        connection = cursor.connection
-        cursor.close()
-        connection.close()
 
 
 # after receiving a post request add it to database
@@ -81,5 +68,3 @@ def add_nlp_to_db():
     close_connection(cursor)
 
     return "Accident records were successfully inserted into the database"
-
-
