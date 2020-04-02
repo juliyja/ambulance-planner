@@ -23,6 +23,7 @@ call_transcript = """none
 # fetch keywords stored in database and save them as a part of different data structures
 # @return list of keywords, dictionary of keyword to keyword group, negation dictionary that stores mappings of
 # negated keywords to keywords and keywords to negated keywords, set of negative keywords
+# TODO: Add major and minor burns
 
 def fetch_keywords_from_db():
     keywords_list = []
@@ -195,7 +196,7 @@ def check_answer(question, simple_answer, sentence, found_keywords):
 
 
 # check sentence for any relevant keywords
-# @params list of already found keywords, analysed remark with mark c for caller and o for operator,
+# @param list of already found keywords, analysed remark with mark c for caller and o for operator,
 # list of question keywords, sentence in remark associated with either caller or operator,
 # flag whether next keyword should be skipped or not
 
@@ -235,11 +236,17 @@ def find_best_keyword(sentence, keywords, index):
     return None, 0
 
 
+# find the cosine similarity between 2 words using word2vec
+# @param sentence said by either operator or caller, keyword checked,
+# index of the word to be checked from the sentence
+# @return cosine similarity if it's above the threshold otherwise 0
+
 def find_cosine_similiarity(sentence, keyword, index):
+
     try:
         sum_cosines = 0
-        list = keyword.split()
-        for k in list:
+        split_keyword_list = keyword.split()
+        for k in split_keyword_list:
             if index < len(sentence):
                 cosine = model.similarity(sentence[index], k)
                 if cosine < threshold:
@@ -249,18 +256,28 @@ def find_cosine_similiarity(sentence, keyword, index):
                 index += 1
             else:
                 return 0
-        average = sum_cosines / len(list)
+        average = sum_cosines / len(split_keyword_list)
         return average
 
+    # catch exception if either the keyword or the word in a sentence does not exist
     except KeyError:
         print("keyword \"" + keyword + "\" or word \"" + sentence[index] + "\" not in vocabulary")
         return 0
 
 
+# map each keyword from found keywords list to their respective group
+# and so for instance not awake and not responding will both map to unconscious
+# @param list of all found keywords
+
 def map_found_keywords(found_keywords):
     mapped_keyword_list = set(map(keywords_map.get, found_keywords))
     return mapped_keyword_list
 
+
+# check all keywords and calculate value for each type of accident or category based on the
+# keywords that characterise them, return the one with the highest score
+# @param list of all found keywords, table name in the database
+# @return most probable type of the accident
 
 def match_accident_info(found_keywords, table):
     types_map = {}
@@ -284,6 +301,9 @@ def match_accident_info(found_keywords, table):
     return best_type
 
 
+# @param type of the accident found and the category found
+# @return binary transport type value corresponding to the given type and category
+
 def find_transport_type(type, category):
     cursor.execute(
         "SELECT TRANSPORT_TYPE FROM TRANSPORT_TYPE_MAPPING WHERE TYPE = '" + type + "' OR CATEGORY = '" + str(
@@ -295,6 +315,8 @@ def find_transport_type(type, category):
         return rows[0][0]
     return transport_type
 
+
+# TODO: Remove after no more changes to nlp are to be made
 
 def test_model():
     word_1 = "burns"
