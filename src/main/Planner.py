@@ -9,17 +9,24 @@ from main.DatabaseUtil import get_cursor
 
 accidents = []
 ambulances = []
+hospitals = []
 
 
 def run_planner():
     print("Starting Ambulance Planner")
     while True:
-        if len(accidents) > 0:
+        local_accidents = accidents.copy()
+        if len(local_accidents) > 0:
             test = get_time_between_points(0.123155, 51.480202, -0.256472, 51.467222)
-            prioritise_accidents()
-            best_accident = min(accidents, key=lambda accident: accident[8])
-            print(best_accident)
+            prioritise_accidents(local_accidents)
+            # choose the accident with the highest priority
+            best_accident = min(local_accidents, key=lambda accident: accident[7])
+            # find best ambulance for the prioritised accident
+            ambulance_assignment(best_accident)
+            # print(best_accident)
 
+
+# use the model generated using XGBoost to predict travel times between two points
 
 def get_time_between_points(pickup_long, pickup_lat, dropoff_long, dropoff_lat):
     trained_xgb_model = joblib.load("results")
@@ -36,8 +43,8 @@ def get_time_between_points(pickup_long, pickup_lat, dropoff_long, dropoff_lat):
     return prediction
 
 
-def prioritise_accidents():
-    for accident in accidents:
+def prioritise_accidents(local_accidents):
+    for accident in local_accidents:
 
         category = accident[3]
         start_time = accident[4]
@@ -57,31 +64,57 @@ def prioritise_accidents():
             accident[7] = 5 if time_elapsed > 6000 else 9
 
 
+# find the best available ambulance that matches accident type
 def ambulance_assignment(best_accident):
+
+    local_ambulances = ambulances.copy()
     best_ambulance = None
-    for ambulance in ambulances:
-        ambulance_cat = ambulance[3]
-        accident_cat = best_accident[4]
+    # 31536000 = 365 days in seconds
+    min_time = 31536000
 
-        min_time = 31500000
+    filtered_ambulances = check_type(best_accident, local_ambulances)
+    print("FILTERED LIST", filtered_ambulances)
 
-        #TODO: Add ambulance filtering
-        if int(ambulance_cat) & int(accident_cat) != int(accident_cat):
-            print("Not Same")
-        else:
-            print("Same")
-            pred_time = get_time_between_points(ambulance[1], ambulance[2], best_accident[1], best_accident[2])
-            if pred_time < min_time:
-                min_time = pred_time
-                best_ambulance = ambulance
+    for ambulance in filtered_ambulances:
+        pred_time = get_time_between_points(ambulance[1], ambulance[2], best_accident[1], best_accident[2])
+        if pred_time < min_time:
+            min_time = pred_time
+            best_ambulance = ambulance
 
     if best_ambulance is None:
         print("There was no ambulance available to assign for this accident")
-
     else:
         cursor = get_cursor()
-        cursor.execute("UPDATE Ambulance SET Assignment = Unavailable")
+        cursor.execute("UPDATE Ambulance SET Assignment = 'Unavailable' WHERE AmbulanceId = " + str(best_ambulance[0]))
 
     return best_ambulance
 
-#def hospital_assignment(best_accident):
+
+def hospital_assignment(best_accident):
+
+    filtered_hospitals = check_type(best_accident, hospitals)
+
+    for hospital in filtered_hospitals:
+        print("nothing yet")
+
+
+
+# check if an item, such as ambulance or hospital, is suitable for a particular accident
+# @param prioritised accident, list of items being checked
+def check_type(best_accident, item_list):
+
+    filtered_list = []
+
+    for item in item_list:
+        item_type = item[4]
+        accident_type = best_accident[5]
+        # use binary and to check if checked item's type and accident's type are compatible
+        if int(item_type) & int(accident_type) == int(accident_type):
+            # print(item_type, " and ", accident_type, " Types match")
+            filtered_list.append(item)
+
+    return filtered_list
+
+
+def save_trip():
+    return
