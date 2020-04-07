@@ -16,7 +16,13 @@ cursor = get_cursor()
 model = gensim.models.KeyedVectors.load_word2vec_format('GoogleNews-vectors-negative300-SLIM.bin', binary=True)
 
 # TODO: delete this, this is only for testing
-call_transcript = """none
+call_transcript = """
+O:Hello, which service do you need?
+C:Hello  my  name  is[removed]I  need  an  ambulance,quick!O:What happened?
+C:It’s my dad, he can’t breathe
+(second operator joins)
+O:The paramedics should be with you any second
+C:I can see them, Thank you
 """
 
 
@@ -58,6 +64,8 @@ keywords, keywords_map, negation_map, negated_keywords = fetch_keywords_from_db(
 
 def categorize_accident(transcript):
 
+    print("Analysing call transcript")
+
     # add manoeuvre as a word embedding for american maneuver
     update_word_model('maneuver', 'manoeuvre')
     # TODO: to be removed once nlp is finished
@@ -79,6 +87,14 @@ def categorize_accident(transcript):
     category = match_accident_info(found_keywords, "ACCIDENT_CATEGORY")
     transport_type = find_transport_type(accident_type, category)
     print(transport_type)
+    print("________________________")
+    print()
+    print("Analysis of call transcript complete:")
+    print()
+    print("Accident Category: ", category)
+    print("Accident Type: ", accident_type)
+    print("Binary Transport Type Value:", transport_type)
+    print()
 
     return accident_type, category, transport_type
 
@@ -89,12 +105,13 @@ def categorize_accident(transcript):
 
 def prepare_text_for_processing(transcript):
     new_transcript = modify_regex(transcript)
+    print(new_transcript)
 
     stop_words = set(nltk.corpus.stopwords.words('english'))
 
     # TODO: remove also words such as ugh, hmmm, egh
     # add words frequently occurring in calls that do not carry any real meaning
-    stop_words.update({"please", "help", "hurry", "quick", "hello", "erm"})
+    stop_words.update({"please", "help", "hurry", "quick", "hello", "erm", "er", "um"})
 
     # Remove stopwords leaving the ones needed to correctly classify accidents
     exclude_words = {"no", "nor", "not", "o"}
@@ -117,7 +134,7 @@ def prepare_text_for_processing(transcript):
 def modify_regex(transcript):
     transcript = transcript.lower()
     # expand english language negative contractions such as can't into can not
-    transcript = re.sub(r"'t", " not", transcript)
+    transcript = re.sub(r"\'t", " not", transcript)
     # remove round brackets and text within them
     transcript = re.sub(r'\([^(\))]*\)', '', transcript)
     # remove square brackets and text within them
@@ -166,7 +183,8 @@ def generate_keywords(qa_list):
     for remark in qa_list:
         sentence = remark[1]
         if question:
-            check_answer(question, simple_answer, sentence, found_keywords)
+            if remark[0] == "c":
+                check_answer(question, simple_answer, sentence, found_keywords)
         check_sentence(found_keywords, remark, question, sentence, skip_keyword)
 
     return found_keywords
@@ -174,7 +192,7 @@ def generate_keywords(qa_list):
 
 # search caller remark for any words with high cosine similarity to answer words (yes, no, not know)
 # @params list of keywords found in operator's question, list of three simple answers for
-# yes, no and don't know, sentence to analyse, list of all already found keywords
+# yes, no and don't know, sentence to analyse, set of all already found keywords
 
 def check_answer(question, simple_answer, sentence, found_keywords):
     answers = {"yes": 0, "no": 0, "not know": 0}
@@ -203,8 +221,8 @@ def check_answer(question, simple_answer, sentence, found_keywords):
 def check_sentence(found_keywords, remark, question, sentence, skip_keyword):
     for i in range(len(sentence)):
         keyword = None
-        if skip_keyword:
-            skip_keyword = False
+        if skip_keyword > 0:
+            skip_keyword -= 1
             continue
         # if word in the sentence is not check if the ones that immediately follow are any relevant keywords
         if sentence[i] == "not":
@@ -212,16 +230,19 @@ def check_sentence(found_keywords, remark, question, sentence, skip_keyword):
             after_not = find_best_keyword(sentence, keywords, i)[0]
             if after_not:
                 keyword = "not " + after_not
-                skip_keyword = True
+                skip_keyword += 1
         else:
             keyword = find_best_keyword(sentence, keywords, i)[0]
         # find keywords for operator's questions
         if remark[0] == "o":
             if keyword:
+                skip_keyword += len(keyword.split()) - 1
                 question.append(keyword)
+                print("JULIA JEST LEPSZA NIZ SZYMON", sentence[i], "FOR KEYWORD", keyword)
         # find keywords for caller's remarks
         if remark[0] == "c":
             if keyword:
+                skip_keyword += len(keyword.split()) - 1
                 found_keywords.add(keyword)
                 print("JULIA JEST LEPSZA NIZ SZYMON", sentence[i], "FOR KEYWORD", keyword)
 
@@ -229,8 +250,8 @@ def check_sentence(found_keywords, remark, question, sentence, skip_keyword):
 # use word2vec in order to find whether a word from the remark matches any of the preset keyword
 
 def find_best_keyword(sentence, keywords, index):
-    best_keyword = max(keywords, key=lambda keyword: find_cosine_similiarity(sentence, keyword, index))
-    cosine_similiarity = find_cosine_similiarity(sentence, best_keyword, index)
+    best_keyword = max(keywords, key=lambda keyword: find_cosine_similarity(sentence, keyword, index))
+    cosine_similiarity = find_cosine_similarity(sentence, best_keyword, index)
     if cosine_similiarity > threshold:
         return best_keyword, cosine_similiarity
     return None, 0
@@ -241,7 +262,7 @@ def find_best_keyword(sentence, keywords, index):
 # index of the word to be checked from the sentence
 # @return cosine similarity if it's above the threshold otherwise 0
 
-def find_cosine_similiarity(sentence, keyword, index):
+def find_cosine_similarity(sentence, keyword, index):
 
     try:
         sum_cosines = 0
@@ -256,12 +277,12 @@ def find_cosine_similiarity(sentence, keyword, index):
                 index += 1
             else:
                 return 0
-        average = sum_cosines / len(split_keyword_list)
+        average = sum_cosines
         return average
 
     # catch exception if either the keyword or the word in a sentence does not exist
     except KeyError:
-        print("keyword \"" + keyword + "\" or word \"" + sentence[index] + "\" not in vocabulary")
+       # print("keyword \"" + keyword + "\" or word \"" + sentence[index] + "\" not in vocabulary")
         return 0
 
 
@@ -319,8 +340,8 @@ def find_transport_type(type, category):
 # TODO: Remove after no more changes to nlp are to be made
 
 def test_model():
-    word_1 = "burns"
-    word_2 = "abrasions"
+    word_1 = "head"
+    word_2 = "headache"
     print("cosine similarity between " + word_1 + " and " + word_2 + " is: " + str(model.similarity(word_1, word_2)))
 
 
