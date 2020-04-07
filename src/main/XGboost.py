@@ -5,6 +5,7 @@ from sklearn.metrics import mean_squared_error
 import joblib
 
 
+# convert HH:MM:SS format into seconds
 def time_convert(x):
     h, m, s = x.split(':')
     return int(h) * 60 ** 2 + int(m) * 60 + int(s)
