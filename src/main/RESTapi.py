@@ -1,5 +1,5 @@
 import re
-from datetime import datetime
+import hashlib
 
 from flask import Flask, request
 from flask_restful import Api, abort
@@ -14,6 +14,12 @@ api = Api(app)
 # after receiving a post request add it to database
 @app.route('/accident', methods=['POST'])
 def add_to_db():
+
+    cursor, user_exist = verify_user()
+    # TODO: Change this message
+    if user_exist:
+        return "Wrong password, please make sure that the credentials you entered are correct"
+
     # print(request.json)
     if not request.json or 'Longitude' not in request.json or 'Latitude' not in request.json:
         abort(400)
@@ -32,7 +38,6 @@ def add_to_db():
         type) + ")"""
     print(mySql_insert_query)
 
-    cursor = get_cursor()
     cursor.execute(mySql_insert_query)
     cursor.connection.commit()
     close_connection(cursor)
@@ -44,6 +49,11 @@ def add_to_db():
 @app.route('/accidentNLP', methods=['POST'])
 def add_nlp_to_db():
     # print(request.json)
+
+    cursor, user_exist = verify_user()
+    if user_exist:
+        return "Wrong password, please make sure that the credentials you entered are correct"
+
     if not request.json or 'Longitude' not in request.json or 'Latitude' not in request.json:
         abort(400)
 
@@ -62,9 +72,21 @@ def add_nlp_to_db():
                          "\", \"" + transcript + "\")"""
     print(mySql_insert_query)
 
-    cursor = get_cursor()
     cursor.execute(mySql_insert_query)
     cursor.connection.commit()
     close_connection(cursor)
 
     return "Accident records were successfully inserted into the database"
+
+
+def verify_user():
+    cursor = get_cursor()
+    login = request.json["Login"]
+    password = request.json["Password"]
+    password = password.encode('utf-8')
+    hash_password = hashlib.sha3_256(password).hexdigest()
+    mysql_check_password_query = "SELECT * FROM USERS WHERE LOGIN = \'" + login + "\' AND HASH = \'" + hash_password + "\';"
+    cursor.execute(mysql_check_password_query)
+    rows = cursor.fetchall()
+    user_exist = len(rows) != 1
+    return cursor, user_exist
