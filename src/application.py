@@ -8,11 +8,11 @@ import _thread
 
 def main():
     print("Starting XGBoost...")
-    XGBoost.train_data()
-    _thread.start_new_thread(fetch_accident_data, ())
-    _thread.start_new_thread(fetch_ambulance_data, ())
-    _thread.start_new_thread(run_planner, ())
-    app.run(port='5002')
+    # XGBoost.train_data()
+    # _thread.start_new_thread(fetch_accident_data, ())
+    # _thread.start_new_thread(fetch_ambulance_data, ())
+    # _thread.start_new_thread(run_planner, ())
+    app.run()
     print("Application closed")
 
 

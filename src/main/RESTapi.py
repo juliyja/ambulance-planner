@@ -16,7 +16,6 @@ api = Api(app)
 def add_to_db():
 
     cursor, user_exist = verify_user()
-    # TODO: Change this message
     if user_exist:
         return "Wrong password, please make sure that the credentials you entered are correct"
 
@@ -27,22 +26,22 @@ def add_to_db():
     longitude = request.json['Longitude']
     latitude = request.json['Latitude']
     category = request.json['Category']
-    req_vehicle_type = request.json['RequiredVehicle']
-    time = request.json['Time']
     type = request.json['Type']
+    time = request.json['Time']
 
-    mySql_insert_query = """INSERT INTO Accident (Longitude, Latitude, Category, RequiredVehicleType, Time, Type) 
+    mySql_insert_query = """INSERT INTO Accident (Longitude, Latitude, Category, Time, Type) 
                             VALUES 
                          (""" + str(longitude) + ", " + str(latitude) + ", " + category + ", " + \
-                         req_vehicle_type + ", " + "STR_TO_DATE('" + time + "','%Y-%m-%d %H:%i:%s'), " + str(
+                         "STR_TO_DATE('" + time + "','%Y-%m-%d %H:%i:%s'), " + str(
         type) + ")"""
     print(mySql_insert_query)
-
     cursor.execute(mySql_insert_query)
+    cursor.execute("SELECT LAST_INSERT_ID()")
+    accident_id = cursor.fetchone()[0]
     cursor.connection.commit()
     close_connection(cursor)
 
-    return "Accident records were successfully inserted into the database"
+    return "Accident record successfully inserted into the database with id: " + str(accident_id)
 
 
 # after receiving a post request add it to database
@@ -73,9 +72,21 @@ def add_nlp_to_db():
     print(mySql_insert_query)
 
     cursor.execute(mySql_insert_query)
+    cursor.execute("SELECT LAST_INSERT_ID()")
+    accident_id = cursor.fetchone()[0]
     cursor.connection.commit()
     close_connection(cursor)
 
+    return "Accident record successfully inserted into the database with id: " + str(accident_id)
+
+
+# TODO: make this do anything, right now it does nothing
+@app.route('/confirmation', methods=['POST'])
+def send_confirmation():
+    status = request.json["status"]
+    accident_id = request.json["accident_id"]
+    if status == 'ok':
+        print("Accident information has been approved")
     return "Accident records were successfully inserted into the database"
 
 
