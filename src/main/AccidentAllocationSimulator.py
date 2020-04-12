@@ -1,7 +1,7 @@
 import numpy
 import requests
 import csv
-from datetime import datetime
+from datetime import datetime, timedelta
 from main.AmbulanceDataUtil import refresh_variables
 from main.RESTapi import app
 from main.Planner import run_planner
@@ -22,9 +22,6 @@ neonatal = 4
 support_vehicle_needed = 2
 transport_needed = 1
 
-time_base = "@ HH:MM:SS"
-accident_time = time_base.replace("@", datetime.today().strftime('%Y-%m-%d'))
-
 counter = 3059
 
 accident_density = {"1": 1530, "2": 764, "3": 459, "4": 306}
@@ -37,21 +34,14 @@ list_of_accidents = [121, 112, 104, 98, 95, 94, 95, 100, 110, 125, 141, 159, 164
 
 def create_accidents():
     # generate accidents
+    now = datetime.now()
     for i in range(0, 24):
-        if i < 10:
-            hour = "0" + str(i)
-            time1 = accident_time.replace("HH", hour)
-        else:
-            time1 = accident_time.replace("HH", str(i))
-        for j in range(list_of_accidents[i]):
+        for j in range(list_of_accidents[now.hour]):
             category = assign_category()
 
             accident_type = assign_type(category)
-
-            timeS = generate_time(time1)
-
+            timeS = generate_time(now).strftime('%Y-%m-%d %H:%M:%S')
             lat, lon = generate_location()
-
             casualties = assign_number_casualties()
 
             data = {"Longitude": lon, "Latitude": lat, "Category": category,
@@ -59,12 +49,14 @@ def create_accidents():
 
             requests.post(url=URL, json=data)
 
+        now = now + timedelta(hours=1)
+
 
 # TODO: create a more accurate way of assigning types
 def assign_type(category):
     accident_type = 0
 
-    if category == "1" or "2":
+    if category == "1" or category == "2":
         if category == "1":
             accident_type = support_vehicle_needed
         accident_type += transport_needed
@@ -82,21 +74,21 @@ def assign_type(category):
         accident_type += mental_health
     elif 65 < random < 70:
         accident_type += cardiac_arrest
+    # TODO: might not work
+    elif int(category) > 2 and 70 < random < 72:
+        accident_type += 1
+    elif int(category) > 2 and 72 < random < 73:
+        accident_type += 2
     else:
         accident_type += major_trauma
     return accident_type
 
 
-def generate_time(time1):
+def generate_time(time):
     minutes = int(numpy.random.uniform(0, 60, 1)[0])
     seconds = int(numpy.random.uniform(0, 60, 1)[0])
-    if minutes < 10:
-        minutes = "0" + str(minutes)
-    if seconds < 10:
-        seconds = "0" + str(seconds)
-    time2 = time1.replace("MM", str(minutes))
-    timeS = time2.replace("SS", str(seconds))
-    return timeS
+    time = time.replace(minute = minutes, second = seconds)
+    return time
 
 
 def assign_category():
@@ -161,8 +153,8 @@ def update_ambulance_availability():
 
 def main():
     _thread.start_new_thread(app.run, ())
-    # time.sleep(10.0)
-    # create_accidents()
+    time.sleep(10.0)
+    create_accidents()
     _thread.start_new_thread(refresh_variables, ())
     time.sleep(10.0)
     run_planner()

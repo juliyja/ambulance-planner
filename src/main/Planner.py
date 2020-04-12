@@ -19,6 +19,7 @@ def run_planner():
     while True:
         local_accidents = accidents.copy()
         if len(local_accidents) > 0:
+            now = datetime.now()
             prioritise_accidents(local_accidents)
             # choose the accident with the highest priority
             best_accident = min(local_accidents, key=lambda accident: accident[7])
@@ -29,7 +30,7 @@ def run_planner():
                 save_trip(best_accident, chosen_hospital, support, support_to_site, site_to_hospital)
             save_trip(best_accident, chosen_hospital, chosen_ambulance, ambulance_to_site, site_to_hospital)
             finish_processing(best_accident)
-
+            print("Categorised in ", datetime.now() - now)
         if not local_accidents:
             time.sleep(10.0)
 
@@ -57,7 +58,7 @@ def get_time_between_points(lat_origin, lon_origin, lat_dest, lon_dest, distance
     df = pd.DataFrame([model_data], columns=model_data.keys())
     prediction = trained_xgb_model.predict(xgb.DMatrix(df))
 
-    return prediction
+    return prediction[0]
 
 
 def prioritise_accidents(local_accidents):
@@ -81,6 +82,7 @@ def prioritise_accidents(local_accidents):
             accident[7] = 5 if time_elapsed > 6000 else 9
 
 
+# TODO: When transport is not needed send a non-transporting ambulance
 # find the best available ambulance that matches accident type
 def ambulance_assignment(best_accident):
     local_ambulances = ambulances.copy()
@@ -89,7 +91,7 @@ def ambulance_assignment(best_accident):
     if best_accident[5] & 2 == 2:
         filtered_ambulances = check_type(2, local_ambulances, 4)
 
-        support_predicted_travel_time, support_vehicle = find_best_resource(best_accident, filtered_ambulances)
+        support_predicted_travel_time, support_vehicle = find_best_resource(best_accident, filtered_ambulances, 2, 1)
 
         if support_vehicle is None:
             print("There was no support vehicle available to assign for this accident")
@@ -97,13 +99,11 @@ def ambulance_assignment(best_accident):
         else:
             cursor = get_cursor()
             cursor.execute("UPDATE Ambulance SET AVAILABLE = FALSE WHERE ID = " + str(support_vehicle[0]))
+            cursor.connection.commit()
 
     filtered_ambulances = check_type(best_accident[5] & 509, local_ambulances, 4)
 
-    filtered_ambulances.sort(key=lambda ambulance: distance_to_point(best_accident, ambulance[2], ambulance[1]))
-    filtered_ambulances = filtered_ambulances[:5]
-
-    predicted_travel_time, best_ambulance = find_best_resource(best_accident, filtered_ambulances)
+    predicted_travel_time, best_ambulance = find_best_resource(best_accident, filtered_ambulances, 2, 1)
 
     if best_ambulance is None:
         print("There was no ambulance available to assign for this accident")
@@ -111,11 +111,11 @@ def ambulance_assignment(best_accident):
     else:
         cursor = get_cursor()
         cursor.execute("UPDATE Ambulance SET AVAILABLE = FALSE WHERE ID = " + str(best_ambulance[0]))
+        cursor.connection.commit()
 
     return best_ambulance, predicted_travel_time, support_vehicle, support_predicted_travel_time
 
 
-# FIXME: bitwise & (bitwise and) between 508 and accident type
 def hospital_assignment(best_accident):
     emergency_dept_needed = None
     filtered_hospitals = []
@@ -131,28 +131,56 @@ def hospital_assignment(best_accident):
     else:
         filtered_hospitals = hospitals
 
-    predicted_travel_time, closest_hospital = find_best_resource(best_accident, filtered_hospitals)
-
-    # TODO: add for more sophisticated hospital choice
-    # filtered_hospitals = check_type(best_accident, hospitals)
+    predicted_travel_time, closest_hospital = find_best_resource(best_accident, filtered_hospitals, 2, 3,
+                                                                 get_sort_hospitals(best_accident, filtered_hospitals))
 
     return closest_hospital, predicted_travel_time
 
 
-def find_best_resource(best_accident, filtered_ambulances):
-    best_resource = min(
-        filtered_ambulances,
-        key=lambda ambulance:
-        get_time_between_points(
-            ambulance[2],
-            ambulance[1],
+def get_sort_hospitals(best_accident, hospital_list):
+    hospital_type_ambulance = best_accident[5] & 508
+    sorted_hospitals = check_type(hospital_type_ambulance, hospital_list, 4)
+    mental_health_accident = best_accident[5] & 256 == 256
+
+    def sort_hospitals(hospital):
+        is_mental_health = hospital[5] & 256 == 256
+        if hospital in sorted_hospitals:
+            return distance_to_point(best_accident, hospital[2], hospital[3])
+        else:
+            if is_mental_health or mental_health_accident:
+                return 1000000.0
+            else:
+                return distance_to_point(best_accident, hospital[2], hospital[3]) * 1.2
+
+    return sort_hospitals
+
+
+def find_best_resource(best_accident, filtered_list, lat_index, lon_index, sorting_method=None):
+    now = datetime.now()
+
+    if sorting_method is None:
+        def sorting_method(res): return distance_to_point(best_accident, res[lat_index], res[lon_index])
+
+    filtered_list.sort(key=sorting_method)
+    filtered_list = filtered_list[:5]
+
+    resources_with_time = []
+    for resource in filtered_list:
+        pred_time = get_time_between_points(
+            resource[lat_index],
+            resource[lon_index],
             best_accident[2],
             best_accident[1],
-            distance_to_point(best_accident, ambulance[2], ambulance[1])))
-    support_distance = distance_to_point(best_accident, best_resource[2], best_resource[1])
-    predicted_travel_time = int(
-        get_time_between_points(best_resource[2], best_resource[1], best_accident[2], best_accident[1],
-                                support_distance)[0])
+            distance_to_point(best_accident, resource[lat_index], resource[lon_index]))
+
+        resources_with_time.append((resource, pred_time))
+
+    print("Estimated in ", datetime.now() - now)
+    best_resource, predicted_travel_time = min(
+        resources_with_time,
+        key=lambda r: r[1])
+    print("Predicted in ", datetime.now() - now)
+
     return predicted_travel_time, best_resource
 
 
@@ -202,5 +230,4 @@ def save_trip(accident, hospital, ambulance, ambulance_to_scene, scene_to_hospit
 
 
 def euclidean_dist(lat_origin, lon_origin, lat_dest, lon_dest):
-    return sqrt((lat_origin - lat_dest) ** 2 + (lon_origin - lon_dest) ** 2)
-
+    return sqrt((float(lat_origin) - float(lat_dest)) ** 2 + (float(lon_origin) - float(lon_dest)) ** 2)

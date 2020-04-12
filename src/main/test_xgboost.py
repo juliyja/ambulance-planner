@@ -7,7 +7,7 @@ def test_xgb():
     summed = 0
     number = 0
     with open('xgboost_test_set.csv', mode='r') as csv_file:
-        with open("evaluate_xgb.csv", mode='w') as file:
+        with open("evaluate_xgb2.csv", mode='w') as file:
             training = csv.writer(file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
             csv_reader = csv.DictReader(csv_file)
             rows = list(csv_reader)

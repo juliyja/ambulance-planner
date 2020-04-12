@@ -19,8 +19,8 @@ class XGBoost:
         evaluate = [(d_train, "train"), (d_val, "validated")]
 
         # Set up params for XGBoost
-
-        num_boost_rounds = 2000
+        # TODO: run again for 1996 rounds
+        num_boost_rounds = 1996
 
         model = xgb.train(params,
                           dtrain=d_train,
@@ -52,7 +52,7 @@ class XGBoost:
         target = training_df["duration"]
         # split the data into train, test and validation sets
         x_train, x_test, target_train, target_test = train_test_split(x, target, test_size=0.3, random_state=123)
-        x_train, x_validate, target_train, target_validate = train_test_split(x_train, target_train, test_size=0.2,
+        x_train, x_validate, target_train, target_validate = train_test_split(x_train, target_train, test_size=0.3,
                                                                               random_state=12)
         print("Converting to Dmatrix")
         # convert the split datasets into Dmatrix

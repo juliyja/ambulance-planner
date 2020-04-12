@@ -30,11 +30,14 @@ def fetch_accident_data():
 
 
 def fetch_hospital_data():
+    hospitals_temp = []
     cursor = get_cursor()
     cursor.execute("SELECT * FROM Hospital")
     rows = cursor.fetchall()
     for row in rows:
-        hospitals.append(list(row))
+        hospitals_temp.append(list(row))
+    hospitals.clear()
+    hospitals.extend(hospitals_temp)
 
 
 def refresh_variables():
