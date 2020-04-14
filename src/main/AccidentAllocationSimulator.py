@@ -4,10 +4,14 @@ import csv
 from datetime import datetime, timedelta
 from main.AmbulanceDataUtil import refresh_variables
 from main.RESTapi import app
-from main.Planner import run_planner
+from main.Planner import run_planner, get_time_between_points, distance_to_point, euclidean_dist
 import _thread
 from main.DatabaseUtil import get_cursor, close_connection
 import time
+from random import random
+
+# the radius for points around the hospital, equal to around 1300 meters
+radius = 0.02
 
 URL = "http://127.0.0.1:5000/accident"
 
@@ -26,22 +30,27 @@ counter = 3059
 
 accident_density = {"1": 1530, "2": 764, "3": 459, "4": 306}
 
-# the index in the list represents the hour and so:
-# at 1 - 112 accidents, at 2am - 104 ... at 11pm - 123
-list_of_accidents = [121, 112, 104, 98, 95, 94, 95, 100, 110, 125, 141, 159, 164, 163, 156, 145, 141, 142, 142, 139,
-                     134, 130, 126, 123]
 
 
 def create_accidents():
+    # the index in the list represents the hour and so:
+    # at 1 - 112 accidents, at 2am - 104 ... at 11pm - 123
+    list_of_accidents = [121, 112, 104, 98, 95, 94, 95, 100, 110, 125, 141, 159, 164, 163, 156, 145, 141, 142, 142, 139,
+                         134, 130, 126, 123]
+
     # generate accidents
     now = datetime.now()
+    list_of_accidents[now.hour] = int(list_of_accidents[now.hour] * (60 - now.minute)/60)
     for i in range(0, 24):
         for j in range(list_of_accidents[now.hour]):
             category = assign_category()
 
             accident_type = assign_type(category)
-            timeS = generate_time(now).strftime('%Y-%m-%d %H:%M:%S')
+            timeS = generate_time(now)
+            while datetime.now() > timeS:
+                timeS = generate_time(now)
             lat, lon = generate_location()
+            timeS = timeS.strftime('%Y-%m-%d %H:%M:%S')
             casualties = assign_number_casualties()
 
             data = {"Longitude": lon, "Latitude": lat, "Category": category,
@@ -74,10 +83,9 @@ def assign_type(category):
         accident_type += mental_health
     elif 65 < random < 70:
         accident_type += cardiac_arrest
-    # TODO: might not work
-    elif int(category) > 2 and 70 < random < 72:
+    elif category == '3' or category == '4' or category == 'HCP' and 70 < random < 72:
         accident_type += 1
-    elif int(category) > 2 and 72 < random < 73:
+    elif category == '3' or category == '4' or category == 'HCP' and 72 < random < 73:
         accident_type += 2
     else:
         accident_type += major_trauma
@@ -109,13 +117,13 @@ def assign_category():
 
 # TODO: Delete if not used
 def assign_number_casualties():
-    random = numpy.random.uniform(0, 100, 1)[0]
-    if random < 85:
+    random = numpy.random.uniform(0, 1000, 1)[0]
+    if random < 900:
         casualties = 1
-    elif random < 97:
+    elif random < 999:
         casualties = 2
     else:
-        casualties = numpy.random.uniform(3, 10, 1)[0]
+        casualties = numpy.random.uniform(3, 6, 1)[0]
 
     return casualties
 
@@ -134,19 +142,82 @@ def generate_location():
                         return accident_latitude, accident_longitude
 
 
+def find_points_within_radius(lat, lon):
+    r = radius * numpy.sqrt(random())
+    theta = random() * 2 * numpy.math.pi
+
+    x = lat + r * numpy.cos(theta)
+    y = lon + r * numpy.sin(theta)
+
+    #print("new pair of points: ", x, y)
+    return x, y
+
+
 def update_ambulance_availability():
     while True:
         cursor = get_cursor()
-        cursor.execute("""UPDATE AMBULANCE
-                            SET AVAILABLE = TRUE
-                            WHERE EXISTS(SELECT *
-                                         FROM (
-                                                  SELECT AMBULANCE_ID AS AMBULANCE_ID, MAX(EST_HOSPITAL_ARRIVAL_TIME) AS MAX
-                                                  FROM TRIP
-                                                  WHERE DEPARTURE_TIME > UNIX_TIMESTAMP() - 3600
-                                                  GROUP BY AMBULANCE_ID) as AIM
-                                         WHERE AMBULANCE.ID = AMBULANCE_ID
-                                           AND MAX < UNIX_TIMESTAMP());""")
+        ambulances_en_route = []
+        cursor.execute("""
+                                   SELECT TRIP.AMBULANCE_ID, LONGITUDE, LATITUDE, EST_HOSPITAL_ARRIVAL_TIME
+                                   from (
+                                            SELECT AMBULANCE_ID AS AMBULANCE_ID, MAX(EST_HOSPITAL_ARRIVAL_TIME) as MAX
+                                            FROM TRIP,
+                                                 HOSPITAL
+                                            WHERE DEPARTURE_TIME > UNIX_TIMESTAMP() - 3600 * 5
+                                              and HOSPITAL_ID = HOSPITAL.ID
+                                            GROUP BY AMBULANCE_ID
+                                            having MAX < UNIX_TIMESTAMP()
+                                        ) as AIM,
+                                        TRIP,
+                                        HOSPITAL
+                                   where TRIP.AMBULANCE_ID = AIM.AMBULANCE_ID
+                                     and MAX = EST_HOSPITAL_ARRIVAL_TIME
+                                     and HOSPITAL_ID = HOSPITAL.ID
+                               """)
+        rows = cursor.fetchall()
+        for row in rows:
+            hospital_lat = row[1]
+            hospital_lon = row[2]
+            row[1], row[2] = find_points_within_radius(hospital_lat, hospital_lon)
+            pred_time = get_time_between_points(
+                hospital_lat,
+                hospital_lon,
+                row[1],
+                row[2],
+                euclidean_dist(hospital_lat, hospital_lon, row[1], row[2]))
+
+            transfer_complete_time = datetime.fromtimestamp(row[3] + pred_time)
+
+            ambulances_en_route.append((row, transfer_complete_time))
+
+        cursor.execute("""UPDATE AMBULANCE, (
+                                SELECT TRIP.AMBULANCE_ID, TRUE, LONGITUDE, LATITUDE
+                                from (
+                                         SELECT AMBULANCE_ID AS AMBULANCE_ID, MAX(EST_HOSPITAL_ARRIVAL_TIME) as MAX
+                                         FROM TRIP,
+                                              HOSPITAL
+                                         WHERE DEPARTURE_TIME > UNIX_TIMESTAMP() - 3600 * 5
+                                           and HOSPITAL_ID = HOSPITAL.ID
+                                         GROUP BY AMBULANCE_ID
+                                         having MAX < UNIX_TIMESTAMP()
+                                     ) as AIM,
+                                     TRIP,
+                                     HOSPITAL
+                                where TRIP.AMBULANCE_ID = AIM.AMBULANCE_ID
+                                  and MAX = EST_HOSPITAL_ARRIVAL_TIME
+                                  and HOSPITAL_ID = HOSPITAL.ID
+                            ) as DAT
+                            SET AMBULANCE.AVAILABLE = true,
+                                AMBULANCE.Longitude = DAT.LONGITUDE,
+                                AMBULANCE.Latitude  = DAT.LATITUDE
+                            where AMBULANCE_ID = ID;""")
+
+        for ambulance in ambulances_en_route:
+            if ambulance[1] < datetime.now():
+                cursor.execute("UPDATE AMBULANCE SET LONGITUDE = " + ambulance[0][2] + " AND LATITUDE = " +
+                               ambulance[0][1] + " WHERE ID = " + ambulance[0][0])
+
+        cursor.connection.commit()
         close_connection(cursor)
         time.sleep(5.0)
 

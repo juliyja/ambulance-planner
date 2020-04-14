@@ -4,18 +4,26 @@ import time
 
 time_fetched_hospitals = 0
 fetched_hospitals_interval = 3600
+ambulance_count = 0
 
 
 def fetch_ambulance_data():
 
     ambulances_temp = []
     cursor = get_cursor()
-    cursor.execute("SELECT * FROM Ambulance")
+    cursor.execute("SELECT * FROM Ambulance WHERE AVAILABLE = TRUE")
     rows = cursor.fetchall()
     for row in rows:
         ambulances_temp.append(list(row))
     ambulances.clear()
     ambulances.extend(ambulances_temp)
+
+
+def count_ambulances():
+    cursor = get_cursor()
+    cursor.execute("SELECT COUNT(*) FROM AMBULANCE")
+    global ambulance_count
+    ambulance_count = cursor.fetchone()[0]
 
 
 def fetch_accident_data():
@@ -43,6 +51,8 @@ def fetch_hospital_data():
 def refresh_variables():
 
     global time_fetched_hospitals
+
+    count_ambulances()
 
     while True:
         fetch_accident_data()

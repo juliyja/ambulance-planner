@@ -7,6 +7,8 @@ import joblib
 import pandas as pd
 import xgboost as xgb
 from datetime import datetime
+
+from main.AmbulanceDataUtil import ambulance_count
 from main.DatabaseUtil import get_cursor, close_connection
 
 accidents = []
@@ -18,13 +20,18 @@ def run_planner():
     print("Starting Ambulance Planner")
     while True:
         local_accidents = accidents.copy()
+        local_ambulances = ambulances.copy()
         if len(local_accidents) > 0:
             now = datetime.now()
             prioritise_accidents(local_accidents)
+            local_accidents = list(
+                filter(lambda accident: len(local_accidents) / ambulance_count > 0.75 or accident[7] < 4,
+                       local_accidents))
             # choose the accident with the highest priority
-            best_accident = min(local_accidents, key=lambda accident: accident[7])
+            best_accident = min(local_accidents, key=lambda accident: (accident[7], -accident[9]))
             # find best ambulance for the prioritised accident
-            chosen_ambulance, ambulance_to_site, support, support_to_site = ambulance_assignment(best_accident)
+            chosen_ambulance, ambulance_to_site, support, support_to_site = ambulance_assignment(best_accident,
+                                                                                                 local_ambulances)
             chosen_hospital, site_to_hospital = hospital_assignment(best_accident)
             if support:
                 save_trip(best_accident, chosen_hospital, support, support_to_site, site_to_hospital)
@@ -69,51 +76,63 @@ def prioritise_accidents(local_accidents):
         now = datetime.now()
         time_elapsed = (now - start_time).total_seconds()
 
+        accident.append(time_elapsed)
+
         if category == "1":
             accident[7] = 1
         elif category == "2":
+            # one minute
             accident[7] = 2 if time_elapsed > 60 else 6
         elif category == "3":
-            accident[7] = 3 if time_elapsed > 500 else 7
+            # 8 minutes
+            accident[7] = 3 if time_elapsed > 480 else 7
         elif category == "4":
-            accident[7] = 4 if time_elapsed > 6000 else 8
-        # if category is HCP and more time then 2.5 hours have elapsed from the accident send an ambulance
+            # 1.5 hours
+            if time_elapsed > 5400:
+                accident[7] = 4
+                # 2 hours and 15 min
+                if time_elapsed > 8100:
+                    accident[7] = 3
+            else:
+                accident[7] = 8
+        # if category is HCP and more time then 1.5 hours have elapsed from the accident increase the priority
         elif category == "HCP":
-            accident[7] = 5 if time_elapsed > 6000 else 9
+            if time_elapsed > 5400:
+                accident[7] = 5
+                # if more than 2.5 hours elapsed increase the priority further
+                if time_elapsed > 9000:
+                    accident[7] = 3
+            else:
+                accident[7] = 9
 
 
-# TODO: When transport is not needed send a non-transporting ambulance
 # find the best available ambulance that matches accident type
-def ambulance_assignment(best_accident):
-    local_ambulances = ambulances.copy()
+def ambulance_assignment(best_accident, local_ambulances):
+
     support_vehicle = None
     support_predicted_travel_time = None
+
     if best_accident[5] & 2 == 2:
-        filtered_ambulances = check_type(2, local_ambulances, 4)
+        filtered_ambulances = check_types(2, local_ambulances, 4)
+        support_predicted_travel_time, support_vehicle = get_ambulance_and_time(best_accident, filtered_ambulances)
 
-        support_predicted_travel_time, support_vehicle = find_best_resource(best_accident, filtered_ambulances, 2, 1)
+    filtered_ambulances = check_types(best_accident[5] & 509, local_ambulances, 4)
+    predicted_travel_time, best_ambulance = get_ambulance_and_time(best_accident, filtered_ambulances)
 
-        if support_vehicle is None:
-            print("There was no support vehicle available to assign for this accident")
+    return best_ambulance, predicted_travel_time, support_vehicle, support_predicted_travel_time
 
-        else:
-            cursor = get_cursor()
-            cursor.execute("UPDATE Ambulance SET AVAILABLE = FALSE WHERE ID = " + str(support_vehicle[0]))
-            cursor.connection.commit()
 
-    filtered_ambulances = check_type(best_accident[5] & 509, local_ambulances, 4)
-
-    predicted_travel_time, best_ambulance = find_best_resource(best_accident, filtered_ambulances, 2, 1)
-
-    if best_ambulance is None:
-        print("There was no ambulance available to assign for this accident")
+def get_ambulance_and_time(best_accident, filtered_ambulances):
+    predicted_time, ambulance = find_best_resource(best_accident, filtered_ambulances, 2, 1)
+    if ambulance is None:
+        print("There was no support vehicle available to assign for this accident")
 
     else:
         cursor = get_cursor()
-        cursor.execute("UPDATE Ambulance SET AVAILABLE = FALSE WHERE ID = " + str(best_ambulance[0]))
+        cursor.execute("UPDATE Ambulance SET AVAILABLE = FALSE WHERE ID = " + str(ambulance[0]))
         cursor.connection.commit()
-
-    return best_ambulance, predicted_travel_time, support_vehicle, support_predicted_travel_time
+        ambulances.remove(ambulance)
+    return predicted_time, ambulance
 
 
 def hospital_assignment(best_accident):
@@ -139,7 +158,7 @@ def hospital_assignment(best_accident):
 
 def get_sort_hospitals(best_accident, hospital_list):
     hospital_type_ambulance = best_accident[5] & 508
-    sorted_hospitals = check_type(hospital_type_ambulance, hospital_list, 4)
+    sorted_hospitals = check_types(hospital_type_ambulance, hospital_list, 4)
     mental_health_accident = best_accident[5] & 256 == 256
 
     def sort_hospitals(hospital):
@@ -194,15 +213,16 @@ def distance_to_point(best_accident, lat_point, lon_point):
 
 # check if an item, such as ambulance or hospital, is suitable for a particular accident
 # @param prioritised accident, list of items being checked
-def check_type(accident_type, item_list, index):
+def check_types(accident_type, resource_list, index):
     filtered_list = []
 
-    for item in item_list:
-        item_type = item[index]
+    for resource in resource_list:
+        resource_type = resource[index]
         # use binary and to check if checked item's type and accident's type are compatible
-        if int(item_type) & int(accident_type) == int(accident_type):
+        if int(resource_type) & int(accident_type) == int(accident_type):
             # print(item_type, " and ", accident_type, " Types match")
-            filtered_list.append(item)
+            if int(resource_type) & 1 == int(accident_type) & 1:
+                filtered_list.append(resource)
 
     return filtered_list
 
