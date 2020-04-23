@@ -38,16 +38,19 @@ This instruction
 
 There will be no accident or trip records in the database at this point. In order to send accident record a curl can be used. An example curl for adding an accident has been provided below:
 
+```
 curl --location --request POST 'localhost:5000/accident' \
 --header 'Content-Type: application/json' \
 --data-raw '{"Longitude":"-0.086944", "Latitude":"51.5033", "Category":"'\''1'\''", "Login":"kcl", "Password":"pass", "Type":"11", "Casualties": "1"} 
 '
-####################
+```
 In order to confirm trip end Trip_id, longitudae, latitude and credentials need to be provided. Below an example curl has been provided. Trip_id needs to be replaced with a valid Trip_id from the database. 
 
+```
 curl --location --request POST 'localhost:5000/tripdone' \
 --header 'Content-Type: application/json' \
 --data-raw '{"Longitude":"-0.0702572", "Latitude":"51.4916", "Login":"kcl", "Password":"pass", "Trip_id":"1"}
 ' 
+```
 
 ## (Simulator Running - Optional)
