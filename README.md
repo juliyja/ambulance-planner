@@ -9,4 +9,4 @@
 
 ## Application running
 1. Navigate to the ambulance directory, wherever it was saved on your machine
-2. run **python setup.py install**
+2. run `python setup.py install`
