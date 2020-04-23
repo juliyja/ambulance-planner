@@ -1,12 +1,17 @@
 # Buid Instructions
 
 ## Database Creation
-1. Install mysql on the machine used.
+1. Download or/and install MySQL on the machine used.
    The link to mysql download page can be found here:
    [MySQL](https://dev.mysql.com/downloads/mysql/)
    
-2. 
+2. Start MySQL, making sure that MySQL instance status is running
+
+3. 
 
 ## Application running
 1. Navigate to the ambulance directory, wherever it was saved on your machine
-2. run `python setup.py install`
+2. run: `python setup.py install` in order to download all packages used in the project
+3. 
+
+## (Optional Simulator Running)
