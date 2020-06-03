@@ -43,16 +43,6 @@ model needs to be added to the same directory (main)
 3. add it to `main` folder
 
 
-## Download Google gensim model
-In order to be able to run XGBoost.py, the generated training data needs to be
-downloaded and added to main folder
-
-1. Download training data here:
-   [Training Data](https://drive.google.com/file/d/1JgxPBP4XzWvT9HlBN-671IPEPzEVkBLA/view?usp=sharing)
-
-2. add it to `main` folder
-
-
 ## Application running
 This instruction
 
