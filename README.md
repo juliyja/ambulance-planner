@@ -47,7 +47,7 @@ model needs to be added to the same directory (main)
 
 
 ## Application running
-This instruction
+Open terminal and do the following:
 
 1. Navigate to the ambulance directory, where the project was saved.
 
