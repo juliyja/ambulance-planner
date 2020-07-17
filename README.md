@@ -1,3 +1,6 @@
+# About ambulance planner
+This is a software build as a part of my Final Year Project at King's College London, with the main aim of imporoving the response time that it takes ambulances to reach accident sites. 
+
 # Build Instructions
 
 ## Database Creation
