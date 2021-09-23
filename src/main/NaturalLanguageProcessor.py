@@ -324,15 +324,6 @@ def find_transport_type(type, category):
         return rows[0][0]
     return transport_type
 
-
-# TODO: Remove after no more changes to nlp are to be made
-
-def test_model():
-    word_1 = "incident"
-    word_2 = "collision"
-    print("cosine similarity between " + word_1 + " and " + word_2 + " is: " + str(model.similarity(word_1, word_2)))
-
-
 # update similar words to have the same vector embedding such as British spelling and American spelling
 def update_word_model(word, new_word):
     model.add(new_word, model.get_vector(word), replace=False)
