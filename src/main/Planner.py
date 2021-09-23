@@ -67,7 +67,7 @@ def get_time_between_points(lat_origin, lon_origin, lat_dest, lon_dest, distance
 
     return prediction[0]
 
-
+# assign best priority depending on accident category and time elapsed
 def prioritise_accidents(local_accidents):
     for accident in local_accidents:
 
