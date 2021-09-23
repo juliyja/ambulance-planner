@@ -230,7 +230,6 @@ def check_sentence(sentence, skip_keyword):
             keyword = find_best_keyword(sentence, keywords, i)[0]
         # find keywords for operator's questions
         if keyword:
-            print("JULIA JEST LEPSZA NIŻ SZYMON!", sentence[i], " FOR ", keyword)
             sentence_keywords.append(keyword)
             skip_keyword += len(keyword.split()) - 1
 
