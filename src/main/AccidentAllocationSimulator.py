@@ -15,7 +15,6 @@ radius = 0.02
 
 URL = "http://127.0.0.1:5000/accident"
 
-# TODO: create a more accurate way of assigning vehicle type
 mental_health = 256
 cardiac_arrest = 128
 major_trauma = 64
